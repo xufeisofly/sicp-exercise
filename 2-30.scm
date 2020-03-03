@@ -20,3 +20,16 @@
        tree))
 
 (square-tree (list (list 1 2) (list 3 4)))
+
+
+(define (tree-map f tree)
+  (map (lambda (sub-tree)
+         (if (pair? sub-tree)
+             (square-tree sub-tree)
+             (f sub-tree)))
+       tree))
+
+(define (square-tree tree)
+  (tree-map square tree))
+
+(square-tree (list (list 1 2) (list 3 4)))
