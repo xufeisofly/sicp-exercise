@@ -1,13 +1,44 @@
-(define ll '(1 3 9 5 7))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;                            ;;
+;;       multipath-merge      ;;
+;;                            ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; 目前只实现 L > K，即每一路 list 的 length > topK 的 K 值
 
-;; node constructor
-(define (make-node index value)
-  (cons index value))
+(define l1 '(9 7 5 4 2 1))
+(define l2 '(12 8 7 5 3 1))
+(define l3 '(11 4 3 2 1))
+(define l4 '(23 8 6 4 3 2 1))
+(define l5 '(30 20 4 3 2 1))
+(define l6 '(33 32 22 16 4 9 6))
+
+(define list-bundle (list l1 l2 l3 l4 l5 l6))
+
+;; 初始化一个各数组指针位置的列表，初始值 '(0 0 0 ...)
+(define (init-idx-l lists)
+  (define (iter result n)
+    (if (= (length lists) n)
+        result
+        (iter (append result '(0)) (+ n 1))))
+  (iter '() 0))
+
+
+(define lists-ptrs (init-idx-l list-bundle))
+
+;; node constructor 因为多路归并是二维数组，所以构建 item，包含数组的 list-n 和 value
+(define (make-item l-n value)
+  (cons l-n value))
+
+(define (make-node index item)
+  (cons index item))
 
 (define (get-index node)
   (car node))
 
 (define (get-value node)
+  (cdr (cdr node)))
+
+(define (get-item node)
   (cdr node))
 
 ;; node 的左子叶节点
@@ -76,17 +107,31 @@
 ;; 交换 l 的两个 node, l 被修改
 (define (swap l node p-node)
   (begin
-    (set! tmp (get-value node))
-    (list-set! l (get-index node) (get-value p-node))
+    (set! tmp (get-item node))
+    (list-set! l (get-index node) (get-item p-node))
     (list-set! l (get-index p-node) tmp)))
+
+(define (parent-node? l node)
+  (<= (get-index node) (get-index (last-parent-node l))))
 
 ;; 子叶节点递归上浮
 (define (flow-up l node)
   (let ((p-node (parent-node l node)))
     (if (smaller? p-node (bigger-child-node l p-node))
         (begin
-          (swap l p-node (bigger-child-node l p-node))
-          (flow-up l (node-by-index l (get-index p-node)))))))
+          (let ((c-node (bigger-child-node l p-node)))
+            (swap l p-node c-node)
+            ;; 上浮后子树做下沉，微调
+            (flow-down l (node-by-index l (get-index c-node)))
+            (flow-up l (node-by-index l (get-index p-node))))))))
+
+(define (flow-down l node)
+  (if (parent-node? l node)
+      (let ((c-node (bigger-child-node l node)))
+        (if (smaller? node c-node)
+            (begin
+              (swap l node c-node)
+              (flow-down l (node-by-index l (get-index c-node))))))))
 
 (define (swap-with-child? l p-node)
   (let ((bigger-child (bigger-child-node l p-node)))
@@ -105,41 +150,91 @@
             (iter (- p-idx 1))))))
   (iter (get-index (last-parent-node l))))
 
-;; 获取堆的最大值
-(define (get-max h)
-  (car h))
+(define get-n-items
+  (lambda (lst num)
+    (if (> num 0)
+        (cons (car lst) (get-n-items (cdr lst) (- num 1)))
+        '()))) ;'
 
-(define l1 '(9 7 4 2 1))
-(define l2 '(12 8 7 3 1))
-(define l3 '(11 4 3 2 1))
+(define slice
+  (lambda (lst start count)
+    (if (> start 1)
+        (slice (cdr lst) (- start 1) count)
+        (get-n-items lst count))))
 
-(define list-bundle (list l1 l2 l3))
+(define (root-node h)
+  (node-by-index h 0))
 
-;; 初始化一个各数组指针位置的列表，初始值 '(0 0 0 ...)
-(define (init-idx-l lists)
-  (define (iter result n)
-    (if (= (length lists) n)
-        result
-        (iter (append result '(0)) (+ n 1))))
-  (iter '() 0))
+(define (last-node h)
+  (node-by-index h (- (length h) 1)))
+
+(define (delete-root-node h)
+  (swap h (root-node h) (last-node h))
+  (remove! (get-item (last-node h)) h)
+  (flow-down h (root-node h)))
+
+;; 返回堆的最大值，并 push 新值进堆， 会改变 h 值
+(define (pop-max-item h lists)
+  (set! select-item (get-item (root-node h)))
+  (delete-root-node h)
+  (push-item (next-item select-item lists) h)
+  select-item)
+
+;; 插入 item 到最大堆
+(define (push-item item h)
+  (append! h (list item))
+  (make-max-heap h))
+
+;; 取 item 的 list-n
+(define (get-l-n item)
+  (car item))
+
+
+;; 获取 list-n 的下一个 item
+(define (next-item select-item lists)
+  (let ((l-n (get-l-n select-item)))
+    (let ((cur-l (list-ref lists l-n)))
+      (let ((cur-idx (list-ref lists-ptrs l-n)))
+        (list-set! lists-ptrs l-n (+ 1 cur-idx))
+        (make-item l-n (list-ref cur-l (+ 1 cur-idx)))))))
+
 
 ;; 用多路 list 的首个元素组成一个 list
-(define (get-first-els lists)
+(define (get-first-items lists)
   (define (iter result idx)
     (if (= (length lists) (+ idx))
         result
         (iter (append result
-                      (list (car (list-ref lists idx))))
+                      (list (make-item idx (car (list-ref lists idx)))))
               (+ idx 1))))
   (iter '() 0))
 
-;; 用首个元素 list 建堆
-(define (init-max-heap lists)
-  (make-max-heap (get-first-els lists)))
 
+;; 多路归并！！！
+(define (topK k lists)
 
-;; (init-max-heap list-bundle)
+  ;; 用首个元素 list 建堆
+  (define (init-max-heap lists)
+    (make-max-heap (get-first-items lists)))
 
-;; (init-idx-l list-bundle)
+  (define (topK-items k lists)
+    (define max-h (init-max-heap lists))
+    (define (iter result n)
+      (if (= n k)
+          result
+          (iter (append result
+                        (list (pop-max-item max-h lists)))
+                (+ 1 n))))
+    (iter '() 0))
 
-;; (define (topK k lists))
+  (define tK-items (topK-items k lists))
+
+  (define (iter result n)
+    (if (= n k)
+        result
+        (iter (append result
+                      (list (cdr (list-ref tK-items n))))
+              (+ n 1))))
+  (iter '() 0))
+
+(topK 20 list-bundle)
