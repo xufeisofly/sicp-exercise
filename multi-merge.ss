@@ -11,8 +11,10 @@
 (define l4 '(23 8 6 4 3 2 1))
 (define l5 '(30 20 4 3 2 1))
 (define l6 '(33 32 22 16 4 9 6))
+(define l7 '(39 22 21 14 3 2))
+(define l8 '(27 21 18 17 6 5))
 
-(define list-bundle (list l1 l2 l3 l4 l5 l6))
+(define list-bundle (list l1 l2 l3 l4 l5 l6 l7 l8))
 
 ;; 初始化一个各数组指针位置的列表，初始值 '(0 0 0 ...)
 (define (init-idx-l lists)
@@ -195,8 +197,11 @@
   (let ((l-n (get-l-n select-item)))
     (let ((cur-l (list-ref lists l-n)))
       (let ((cur-idx (list-ref lists-ptrs l-n)))
-        (list-set! lists-ptrs l-n (+ 1 cur-idx))
-        (make-item l-n (list-ref cur-l (+ 1 cur-idx)))))))
+        (if (= cur-idx (- (length cur-l) 1))
+            (error "list length should > K")
+            (begin
+              (list-set! lists-ptrs l-n (+ 1 cur-idx))
+              (make-item l-n (list-ref cur-l (+ 1 cur-idx)))))))))
 
 
 ;; 用多路 list 的首个元素组成一个 list
@@ -237,4 +242,4 @@
               (+ n 1))))
   (iter '() 0))
 
-(topK 20 list-bundle)
+(topK 10 list-bundle)
